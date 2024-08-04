@@ -1,0 +1,56 @@
+const express = require('express');
+const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
+
+const app = express();
+app.use(express.json());
+
+const PORT = process.env.PORT || 3000;
+const WEBHOOK_URL = 'https://discord.com/api/webhooks/1267626758828458067/9-C4uKt9qYsUNQIMC2xW9GqT74IR8kjZC9XtgjNFiu2KWf8mrmM8_o0_ayqNkHmdZYu9';
+
+let keys = {};
+
+// Generate a new key
+app.post('/generate-key', async (req, res) => {
+    const key = uuidv4();
+    const expiresIn = req.body.expiresIn || 3600; // Default expiration time: 1 hour
+    const expirationTime = Date.now() + expiresIn * 1000;
+
+    keys[key] = expirationTime;
+
+    // Send key and expiration info to Discord webhook
+    try {
+        await axios.post(WEBHOOK_URL, {
+            content: `New Key: ${key}\nExpires in: ${expiresIn} seconds`
+        });
+        res.json({ key, expiresIn });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to send webhook message' });
+    }
+});
+
+// Validate a key
+app.post('/validate-key', (req, res) => {
+    const key = req.body.key;
+    const currentTime = Date.now();
+
+    if (keys[key] && keys[key] > currentTime) {
+        res.json({ valid: true });
+    } else {
+        res.json({ valid: false });
+    }
+});
+
+// Cleanup expired keys
+setInterval(() => {
+    const currentTime = Date.now();
+    for (const key in keys) {
+        if (keys[key] <= currentTime) {
+            delete keys[key];
+        }
+    }
+}, 60000); // Cleanup every minute
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
